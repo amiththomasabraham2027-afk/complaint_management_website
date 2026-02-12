@@ -1,0 +1,127 @@
+@import url('https://fonts.googleapis.com/css2?family=Geist:wght@100;400;500;700;800&family=Geist+Mono:wght@400;500;700&display=swap');
+
+@import "tailwindcss/base";
+@import "tailwindcss/components";
+@import "tailwindcss/utilities";
+
+@layer base {
+  :root {
+    --background: 0 0% 6%;
+    --foreground: 0 0% 100%;
+    --primary: 120 100% 53%;
+    --secondary: 180 100% 50%;
+    --accent: 328 100% 50%;
+    --muted: 220 13% 20%;
+    --border: 217 32% 17%;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rounding-mode" 0;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+}
+
+@layer components {
+  .glass-effect {
+    @apply bg-black/30 backdrop-blur-md border border-white/10 rounded-lg;
+  }
+
+  .glass-input {
+    @apply bg-background/50 backdrop-blur border border-border rounded-lg px-4 py-2 text-foreground placeholder-muted-foreground focus:outline-none focus:border-primary focus:shadow-neon transition-all duration-300;
+  }
+
+  .glass-button {
+    @apply bg-black/50 backdrop-blur border border-border rounded-lg px-4 py-2 text-foreground font-medium hover:bg-black/70 hover:border-primary hover:shadow-neon transition-all duration-300 cursor-pointer;
+  }
+
+  .glass-card {
+    @apply bg-black/40 backdrop-blur-md border border-white/10 rounded-lg p-6 hover:border-primary/50 transition-all duration-300;
+  }
+
+  .neon-text {
+    @apply text-primary font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent;
+  }
+
+  .container-app {
+    @apply min-h-screen bg-gradient-to-br from-background via-background to-black;
+  }
+
+  .input-error {
+    @apply text-accent text-sm mt-1;
+  }
+
+  .form-group {
+    @apply mb-6;
+  }
+
+  .label {
+    @apply block text-sm font-medium text-foreground mb-2;
+  }
+
+  .badge-status {
+    @apply inline-flex items-center px-3 py-1 rounded-full text-xs font-medium border;
+  }
+
+  .flex-center {
+    @apply flex items-center justify-center;
+  }
+
+  .flex-between {
+    @apply flex items-center justify-between;
+  }
+
+  .fade-in {
+    animation: fadeIn 0.3s ease-in-out;
+  }
+
+  .slide-in {
+    animation: slideIn 0.3s ease-in-out;
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Scrollbar Styling */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.3);
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(0, 255, 136, 0.5);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 255, 136, 0.7);
+}
