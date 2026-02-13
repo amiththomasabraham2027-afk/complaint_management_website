@@ -1,0 +1,39 @@
+version: '3.8'
+
+services:
+  app:
+    image: amiththomasabraham/resolvex-complaint-system:latest
+    container_name: resolvex-app
+    environment:
+      - NODE_ENV=production
+      - NEXTAUTH_URL=http://localhost
+      - NEXT_PUBLIC_API_URL=http://localhost/api
+      - JWT_SECRET=${JWT_SECRET}
+      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
+      - MONGODB_URI=${MONGODB_URI}
+    ports:
+      - "3000:3000"
+    restart: unless-stopped
+    networks:
+      - resolvex-network
+    depends_on:
+      - nginx
+
+  nginx:
+    image: nginx:latest
+    container_name: resolvex-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl:/etc/nginx/ssl:ro
+    restart: unless-stopped
+    networks:
+      - resolvex-network
+    depends_on:
+      - app
+
+networks:
+  resolvex-network:
+    driver: bridge
