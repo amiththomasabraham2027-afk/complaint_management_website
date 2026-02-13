@@ -4,7 +4,6 @@ import { Complaint } from "@/models/Complaint";
 import { validateToken } from "@/lib/auth/cookies";
 import { UpdateComplaintStatusSchema, AddAdminNotesSchema } from "@/lib/validation/schemas";
 import { UserRole } from "@/types";
-import { withErrorHandling } from "@/lib/middleware/api";
 
 async function handler(
   request: NextRequest,
@@ -220,7 +219,7 @@ async function handler(
   );
 }
 
-export const GET = withErrorHandling(handler);
-export const PUT = withErrorHandling(handler);
-export const PATCH = withErrorHandling(handler);
-export const DELETE = withErrorHandling(handler);
+export const GET = handler;
+export const PUT = handler;
+export const PATCH = handler;
+export const DELETE = handler;

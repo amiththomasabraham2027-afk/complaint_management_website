@@ -12,7 +12,6 @@ import {
   FileText,
   Settings,
   Users,
-  ChevronDown,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { motion, AnimatePresence } from "framer-motion";

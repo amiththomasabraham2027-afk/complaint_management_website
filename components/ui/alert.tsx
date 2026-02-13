@@ -1,4 +1,3 @@
-import { AlertCircle, CheckCircle, Info, XCircle } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 
 type AlertType = "default" | "destructive" | "success" | "info";

@@ -7,7 +7,7 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 
 # Install dependencies
-RUN npm ci
+RUN npm install
 
 # Copy application code
 COPY . .
@@ -16,31 +16,20 @@ COPY . .
 RUN npm run build
 
 # Production stage
-FROM node:20-alpine
+FROM node:20-alpine AS runner
 
 WORKDIR /app
 
-# Install production dependencies only
-RUN npm install -g next
-
-COPY package.json package-lock.json ./
-
-RUN npm ci --omit=dev
-
-# Copy built application from builder
-COPY --from=builder /app/.next ./.next
-COPY --from=builder /app/public ./public
-
-# Environment variables
 ENV NODE_ENV=production
 ENV PORT=3000
+
+# Copy built application from builder
+COPY --from=builder /app/.next/standalone ./
+COPY --from=builder /app/.next/static ./.next/static
+COPY --from=builder /app/public ./public
 
 # Expose port
 EXPOSE 3000
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD node -e "require('http').get('http://localhost:3000', (r) => {if (r.statusCode !== 200) throw new Error(r.statusCode)})"
-
 # Start application
-CMD ["npm", "start"]
+CMD ["node", "server.js"]

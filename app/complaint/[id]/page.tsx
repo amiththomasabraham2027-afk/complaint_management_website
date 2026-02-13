@@ -14,9 +14,7 @@ import { motion } from "framer-motion";
 import { ArrowLeft, Loader, CheckCircle, AlertCircle } from "lucide-react";
 import {
   getStatusColor,
-  getStatusBgColor,
   getPriorityColor,
-  getPriorityBgColor,
   formatDate,
 } from "@/lib/utils/formatting";
 

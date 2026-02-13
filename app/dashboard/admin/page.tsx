@@ -10,7 +10,7 @@ import { Select } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { motion } from "framer-motion";
 import { BarChart3, AlertCircle, Loader } from "lucide-react";
-import { getStatusColor, getStatusBgColor, formatDate } from "@/lib/utils/formatting";
+import { getStatusColor, formatDate } from "@/lib/utils/formatting";
 
 interface Complaint {
   _id: string;

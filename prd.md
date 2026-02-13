@@ -27,7 +27,7 @@ This system provides:
 
 ✔ Real-time tracking
 
-✔ Status updates
+✔ Status updates+
 
 ✔ Admin analytics dashboard
 

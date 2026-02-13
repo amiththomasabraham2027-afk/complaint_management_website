@@ -6,9 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   getStatusColor,
-  getStatusBgColor,
   getPriorityColor,
-  getPriorityBgColor,
   formatDate,
 } from "@/lib/utils/formatting";
 
@@ -24,7 +22,6 @@ interface ComplaintCardProps {
 }
 
 export function ComplaintCard({
-  id,
   title,
   description,
   status,
