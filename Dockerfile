@@ -30,8 +30,8 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=builder --chown=nextjs:nodejs /app/public ./public
 
-# Copy environment configuration
-COPY --chown=nextjs:nodejs .env.local ./.env.local || true
+# Environment variables are provided via docker-compose.yml in production
+# Do not copy .env files into the image
 
 # Set user
 USER nextjs
