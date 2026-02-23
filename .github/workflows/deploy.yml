@@ -14,15 +14,24 @@ jobs:
         uses: actions/checkout@v3
 
       - name: Setup SSH Key
+        shell: bash
         run: |
           mkdir -p ~/.ssh
-          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          # Write the key, removing carriage returns and trailing whitespace
+          printf '%s\n' "${{ secrets.SSH_PRIVATE_KEY }}" | sed 's/[[:space:]]*$//' > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
+          # Verify the key starts and ends correctly
+          echo "=== SSH Key Status ==="
+          wc -l ~/.ssh/deploy_key
+          head -1 ~/.ssh/deploy_key
+          tail -1 ~/.ssh/deploy_key
           ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts 2>/dev/null || true
 
       - name: Deploy via SSH
+        shell: bash
         run: |
-          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no -o UserKnownHostsFile=~/.ssh/known_hosts ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
+          echo "=== Testing SSH Connection ==="
+          ssh -v -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no -o UserKnownHostsFile=~/.ssh/known_hosts -o ConnectTimeout=10 ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'DEPLOY_SCRIPT'
           echo "=== Deployment Started ==="
           whoami
           pwd
@@ -33,18 +42,23 @@ jobs:
           
           # Initialize or update git repo
           if [ -d .git ]; then
+            echo "Pulling latest code..."
             git pull origin main
           else
+            echo "Cloning repository..."
             git clone https://github.com/amiththomasabraham2027-afk/complaint_management_website.git .
           fi
           
           # Install dependencies
+          echo "Installing dependencies..."
           npm ci --production
           
-          # Build application
+          # Build application  
+          echo "Building application..."
           npm run build
           
           # Install and start with PM2
+          echo "Starting application with PM2..."
           npm install -g pm2 2>/dev/null || true
           pm2 restart resolvex || pm2 start npm --name "resolvex" -- start
           pm2 save
@@ -53,4 +67,4 @@ jobs:
           echo "=== Deployment Status ==="
           pm2 list
           echo "=== Application Ready ==="
-          EOF
+          DEPLOY_SCRIPT
