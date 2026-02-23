@@ -13,31 +13,12 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: Setup SSH Key
-        shell: bash
-        run: |
-          mkdir -p ~/.ssh && chmod 700 ~/.ssh
-
-          # Decode base64 private key, strip any stray \r characters
-          printf '%s' "${{ secrets.SSH_PRIVATE_KEY }}" | base64 -d | tr -d '\r' > ~/.ssh/deploy_key
-          chmod 600 ~/.ssh/deploy_key
-
-          # Print fingerprint so we can verify it matches authorized_keys on server
-          echo "=== Key fingerprint being used ==="
-          ssh-keygen -l -f ~/.ssh/deploy_key || echo "KEY TYPE -1 (invalid decode)"
-          echo "=== Public key being used ==="
-          ssh-keygen -y -f ~/.ssh/deploy_key || echo "COULD NOT EXTRACT PUBLIC KEY"
-
-          # Add server to known hosts
-          ssh-keyscan -H "${{ secrets.SERVER_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null || true
-
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          key_format: base64
           timeout: 60s
           script: |
             echo "=== Deployment Started ==="
