@@ -1,48 +1,26 @@
 version: '3.8'
 
-services:
-  mongodb:
-    image: mongo:7-alpine
-    container_name: complaint-mongodb
-    restart: always
-    environment:
-      MONGO_INITDB_ROOT_USERNAME: ${MONGODB_USER:-admin}
-      MONGO_INITDB_ROOT_PASSWORD: ${MONGODB_PASSWORD:-production}
-    volumes:
-      - mongodb_data:/data/db
-    ports:
-      - "27017:27017"
-    healthcheck:
-      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - complaint-network
+# Production setup: Nginx reverse proxy + Next.js app
+# MongoDB should be external (MongoDB Atlas or AWS DocumentDB)
+# All environment variables must be provided via .env file
 
-  complaint-app:
-    build:
-      context: .
-      dockerfile: Dockerfile
+services:
+  # Next.js Complaint Management Application
+  app:
     image: complaint-app:latest
     container_name: complaint-app
-    restart: always
-    ports:
-      - "3000:3000"
-    depends_on:
-      mongodb:
-        condition: service_healthy
+    restart: unless-stopped
+    expose:
+      - "3000"
     environment:
       NODE_ENV: production
-      MONGODB_URI: ${MONGODB_URI:-mongodb://admin:production@mongodb:27017/resolvex?authSource=admin}
+      MONGODB_URI: ${MONGODB_URI}
       JWT_SECRET: ${JWT_SECRET}
       JWT_EXPIRE: 7d
       NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}
       NEXTAUTH_URL: ${NEXTAUTH_URL}
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
-      NODE_OPTIONS: --max-old-space-size=2048
-    volumes:
-      - ./public:/app/public:ro
+      NODE_OPTIONS: --max-old-space-size=1024
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000"]
       interval: 30s
@@ -51,25 +29,31 @@ services:
       start_period: 40s
     networks:
       - complaint-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "3"
 
+  # Nginx Reverse Proxy
   nginx:
     image: nginx:alpine
     container_name: complaint-nginx
-    restart: always
+    restart: unless-stopped
     ports:
       - "80:80"
       - "443:443"
     volumes:
-      - ./nginx.conf:/etc/nginx/nginx.conf:ro
-      - /etc/letsencrypt:/etc/letsencrypt:ro
+      - ./nginx/prod.conf:/etc/nginx/conf.d/default.conf:ro
     depends_on:
-      - complaint-app
+      - app
     networks:
       - complaint-network
-
-volumes:
-  mongodb_data:
-    driver: local
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "3"
 
 networks:
   complaint-network:

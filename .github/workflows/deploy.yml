@@ -1,64 +1,137 @@
-name: Deploy to Ubuntu Server
+name: Deploy Complaint App to AWS EC2
 
 on:
   push:
     branches:
       - main
+  workflow_dispatch:
+
+env:
+  IMAGE_NAME: complaint-app
 
 jobs:
-  deploy:
+  build-and-deploy:
     runs-on: ubuntu-latest
-
+    
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
+      # 1. Checkout the code
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
+      # 2. Set up Docker
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # 3. Login to Docker Hub
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      # 4. Build and push Docker image
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ secrets.DOCKER_USERNAME }}/complaint-app:latest
+            ${{ secrets.DOCKER_USERNAME }}/complaint-app:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # 5. Setup SSH credentials
       - name: Setup SSH key
         run: |
           mkdir -p ~/.ssh
-          printf '%s' "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-          echo "=== Key fingerprint ==="
-          ssh-keygen -l -f ~/.ssh/deploy_key
-          echo "=== Scanning host keys ==="
-          ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts 2>/dev/null
-          echo "Host keys collected: $(wc -l < ~/.ssh/known_hosts)"
+          ssh-keyscan -H ${{ secrets.HOST }} >> ~/.ssh/known_hosts 2>/dev/null || true
 
-      - name: Test SSH + check server authorized_keys
-        run: |
-          echo "=== Verbose SSH test ==="
-          ssh -v -i ~/.ssh/deploy_key \
-            -o StrictHostKeyChecking=no \
-            -o ConnectTimeout=15 \
-            ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} \
-            'echo "=== CONNECTED ==="; whoami; echo "authorised key count:"; cat ~/.ssh/authorized_keys | wc -l; echo "=== key fingerprints ==="; ssh-keygen -l -f ~/.ssh/authorized_keys; echo "=== permissions ==="; ls -la ~/.ssh/' \
-          2>&1
-
-      - name: Deploy application
+      # 6. Deploy to EC2
+      - name: Deploy to AWS EC2
+        env:
+          HOST: ${{ secrets.HOST }}
+          USERNAME: ${{ secrets.USERNAME }}
+          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+          MONGODB_URI: ${{ secrets.MONGODB_URI }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          NEXTAUTH_SECRET: ${{ secrets.NEXTAUTH_SECRET }}
         run: |
           ssh -i ~/.ssh/deploy_key \
             -o StrictHostKeyChecking=no \
-            ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} \
-            'set -e
-            echo "=== Deployment Started ==="
-            whoami && pwd
-            mkdir -p ~/complaint-management-web
-            cd ~/complaint-management-web
-            if [ -d .git ]; then
-              echo "Pulling latest code..."
-              git pull origin main
-            else
-              echo "Cloning repository..."
-              git clone https://github.com/amiththomasabraham2027-afk/complaint_management_website.git .
+            -o ConnectTimeout=30 \
+            $USERNAME@$HOST << 'EOF'
+          
+          set -e
+          echo "========== DEPLOYMENT STARTED =========="
+          
+          # Create app directory
+          mkdir -p ~/complaint-app
+          cd ~/complaint-app
+          
+          # Clone or update repository
+          if [ -d .git ]; then
+            echo "✓ Pulling latest code..."
+            git pull origin main
+          else
+            echo "✓ Cloning repository..."
+            git clone https://github.com/${{ github.repository }}.git .
+          fi
+          
+          # Create .env file with production variables
+          cat > .env.production << ENVEOF
+          NODE_ENV=production
+          MONGODB_URI=$MONGODB_URI
+          JWT_SECRET=$JWT_SECRET
+          NEXTAUTH_SECRET=$NEXTAUTH_SECRET
+          NEXTAUTH_URL=http://$HOST
+          NEXT_PUBLIC_API_URL=http://$HOST/api
+          ENVEOF
+          
+          # Pull latest Docker image
+          echo "✓ Pulling latest Docker image..."
+          docker pull $DOCKER_USERNAME/complaint-app:latest
+          
+          # Stop existing containers
+          echo "✓ Stopping old containers..."
+          docker-compose -f docker-compose.prod.yml down --remove-orphans || true
+          
+          # Start new containers
+          echo "✓ Starting new containers..."
+          docker-compose -f docker-compose.prod.yml up -d
+          
+          # Wait for app to be healthy
+          echo "✓ Waiting for application to be ready..."
+          for i in {1..30}; do
+            if curl -f http://localhost/health > /dev/null 2>&1; then
+              echo "✓ Application is healthy!"
+              break
             fi
-            echo "Installing dependencies..."
-            npm ci --production
-            echo "Building application..."
-            npm run build
-            echo "Starting with PM2..."
-            npm install -g pm2 2>/dev/null || true
-            pm2 restart resolvex || pm2 start npm --name "resolvex" -- start
-            pm2 save
-            echo "=== Deployment Status ==="
-            pm2 list
-            echo "=== Done ==="'
+            echo "  Waiting... ($i/30)"
+            sleep 2
+          done
+          
+          # Show status
+          echo ""
+          echo "========== DEPLOYMENT STATUS =========="
+          docker-compose -f docker-compose.prod.yml ps
+          echo ""
+          echo "✓ Application deployed successfully!"
+          echo "✓ URL: http://$HOST"
+          echo "=========================================="
+          
+          EOF
+
+      - name: Deployment successful
+        if: success()
+        run: |
+          echo "✅ Deployment completed successfully!"
+          echo "Your application is now live at: http://${{ secrets.HOST }}"
+
+      - name: Deployment failed
+        if: failure()
+        run: |
+          echo "❌ Deployment failed. Check logs above for details."
+          exit 1

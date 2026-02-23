@@ -17,3 +17,25 @@ yarn-error.log*
 *~
 .env.production.local
 .vercel
+
+# Deployment automation files (contains sensitive data)
+.deployment-config.json
+.temp-secrets.json
+.env.deployment
+GITHUB_SECRETS_REFERENCE.md
+
+# SSH keys and certificates
+.ssh/
+*.key
+*.pub
+
+# Docker compose overrides with secrets
+docker-compose.override.yml
+docker-compose.*.local.yml
+
+# Secret management scripts (contain hardcoded credentials - use environment variables instead)
+**/create_github_secrets.py
+**/upload-github-secrets.py
+**/upload-secrets-interactive.py
+setup-secrets.ps1
+
