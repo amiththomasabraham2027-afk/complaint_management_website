@@ -17,14 +17,27 @@ jobs:
         shell: bash
         run: |
           mkdir -p ~/.ssh
-          # Write the key, removing carriage returns and trailing whitespace
-          printf '%s\n' "${{ secrets.SSH_PRIVATE_KEY }}" | sed 's/[[:space:]]*$//' > ~/.ssh/deploy_key
+          # Decode base64 SSH key - use printf for better handling
+          printf "%s" "${{ secrets.SSH_PRIVATE_KEY }}" | base64 -d > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-          # Verify the key starts and ends correctly
-          echo "=== SSH Key Status ==="
-          wc -l ~/.ssh/deploy_key
+          
+          # Verify the key is valid
+          echo "=== SSH Key Verification ==="
+          if file ~/.ssh/deploy_key | grep -q "private key"; then
+            echo "✅ SSH key is valid"
+          else
+            echo "❌ SSH key format invalid"
+            echo "First 200 bytes:"
+            head -c 200 ~/.ssh/deploy_key
+            echo ""
+            exit 1
+          fi
+          
           head -1 ~/.ssh/deploy_key
           tail -1 ~/.ssh/deploy_key
+          echo "Key size: $(wc -c < ~/.ssh/deploy_key) bytes"
+          
+          # Add server to known hosts
           ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts 2>/dev/null || true
 
       - name: Deploy via SSH
