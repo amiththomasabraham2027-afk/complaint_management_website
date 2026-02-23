@@ -20,12 +20,24 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: 22
+          timeout: 60s
+          command_timeout: 60s
           
           script: |
-            cd ~/complaint-management-web || git clone https://github.com/amiththomasabraham2027-afk/complaint_management_website.git complaint-management-web && cd complaint-management-web
+            echo "=== Deployment Started ==="
+            whoami
+            pwd
             
-            # Pull latest code
-            git pull origin main
+            # Create project directory if it doesn't exist
+            mkdir -p ~/complaint-management-web
+            cd ~/complaint-management-web
+            
+            # Initialize or update git repo
+            if [ -d .git ]; then
+              git pull origin main
+            else
+              git clone https://github.com/amiththomasabraham2027-afk/complaint_management_website.git .
+            fi
             
             # Install dependencies
             npm ci --production
@@ -33,9 +45,12 @@ jobs:
             # Build application
             npm run build
             
-            # Restart with PM2 (if available) or Node directly
+            # Install and start with PM2
             npm install -g pm2 2>/dev/null || true
             pm2 restart resolvex || pm2 start npm --name "resolvex" -- start
+            pm2 save
             
-            # Show status
-            pm2 list || echo "App deployed"
+            # Verify deployment
+            echo "=== Deployment Status ==="
+            pm2 list
+            echo "=== Application Ready ==="
