@@ -19,40 +19,28 @@ jobs:
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
           
-          # Decode base64 SSH key using Python (more reliable than bash base64)
-          python3 << 'EOF'
-          import base64
-          import os
-          
-          key_b64 = """${{ secrets.SSH_PRIVATE_KEY }}"""
-          
-          try:
-              key_bytes = base64.b64decode(key_b64, validate=True)
-              with open(os.path.expanduser('~/.ssh/deploy_key'), 'wb') as f:
-                  f.write(key_bytes)
-              os.chmod(os.path.expanduser('~/.ssh/deploy_key'), 0o600)
-              print("✅ SSH key decoded and saved")
-          except Exception as e:
-              print(f"❌ Error decoding key: {e}")
-              exit(1)
+          # Save secret to temp file first, then decode
+          cat > /tmp/key.b64 << 'EOF'
+          ${{ secrets.SSH_PRIVATE_KEY }}
           EOF
           
-          # Verify the key is valid
-          echo "=== SSH Key Verification ==="
-          if file ~/.ssh/deploy_key | grep -q "private key"; then
-            echo "✅ SSH key is valid RSA private key"
-          else
-            echo "⚠️ File type check:"
-            file ~/.ssh/deploy_key
-            echo ""
-            echo "Key header:"
-            head -1 ~/.ssh/deploy_key
-            echo ""
-            echo "Key footer:"
-            tail -1 ~/.ssh/deploy_key
-            echo ""
-            echo "Key size: $(wc -c < ~/.ssh/deploy_key) bytes"
-          fi
+          # Strip any whitespace and decode
+          cat /tmp/key.b64 | tr -d ' \n\r\t' | base64 -d | tee ~/.ssh/deploy_key > /dev/null
+          
+          # Set correct permissions
+          chmod 600 ~/.ssh/deploy_key
+          
+          # Debug output
+          echo "=== SSH Key Setup ==="
+          echo "File exists: $([ -f ~/.ssh/deploy_key ] && echo 'YES' || echo 'NO')"
+          echo "File size: $(stat -f %z ~/.ssh/deploy_key 2>/dev/null || stat -c%s ~/.ssh/deploy_key 2>/dev/null || wc -c < ~/.ssh/deploy_key) bytes"
+          echo "File permissions: $(ls -la ~/.ssh/deploy_key | awk '{print $1}')"
+          echo "File type:"
+          file ~/.ssh/deploy_key
+          echo "First line:"
+          head -1 ~/.ssh/deploy_key
+          echo "Last line:"
+          tail -1 ~/.ssh/deploy_key
           
           # Add server to known hosts
           ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts 2>/dev/null || true
