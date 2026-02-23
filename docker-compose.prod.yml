@@ -1,0 +1,76 @@
+version: '3.8'
+
+services:
+  mongodb:
+    image: mongo:7-alpine
+    container_name: complaint-mongodb
+    restart: always
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGODB_USER:-admin}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGODB_PASSWORD:-production}
+    volumes:
+      - mongodb_data:/data/db
+    ports:
+      - "27017:27017"
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - complaint-network
+
+  complaint-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: complaint-app:latest
+    container_name: complaint-app
+    restart: always
+    ports:
+      - "3000:3000"
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      MONGODB_URI: ${MONGODB_URI:-mongodb://admin:production@mongodb:27017/resolvex?authSource=admin}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRE: 7d
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}
+      NEXTAUTH_URL: ${NEXTAUTH_URL}
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+      NODE_OPTIONS: --max-old-space-size=2048
+    volumes:
+      - ./public:/app/public:ro
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - complaint-network
+
+  nginx:
+    image: nginx:alpine
+    container_name: complaint-nginx
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+    depends_on:
+      - complaint-app
+    networks:
+      - complaint-network
+
+volumes:
+  mongodb_data:
+    driver: local
+
+networks:
+  complaint-network:
+    driver: bridge

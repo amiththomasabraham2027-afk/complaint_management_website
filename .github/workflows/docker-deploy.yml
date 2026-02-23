@@ -1,0 +1,175 @@
+name: Deploy with Docker to AWS EC2
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+  AWS_REGION: ap-south-1
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    outputs:
+      image-tag: ${{ steps.meta.outputs.tags }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=sha,prefix={{branch}}-
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,prefix=sha-
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  test:
+    runs-on: ubuntu-latest
+    needs: build
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run linter
+        run: npm run lint --if-present
+
+      - name: Type check
+        run: npm run type-check --if-present
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: [build, test]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts 2>/dev/null || true
+
+      - name: Deploy to EC2
+        env:
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SERVER_USER: ${{ secrets.SERVER_USER }}
+          DOCKER_IMAGE: ${{ needs.build.outputs.image-tag }}
+        run: |
+          ssh -i ~/.ssh/deploy_key \
+            -o StrictHostKeyChecking=no \
+            -o ConnectTimeout=30 \
+            $SERVER_USER@$SERVER_HOST \
+            'set -e
+            echo "=== Deployment Started ==="
+            
+            # Create deployment directory
+            mkdir -p ~/complaint-app
+            cd ~/complaint-app
+            
+            # Clone or update repository
+            if [ -d .git ]; then
+              echo "Updating repository..."
+              git pull origin main
+            else
+              echo "Cloning repository..."
+              git clone https://github.com/${{ github.repository }}.git .
+            fi
+            
+            # Create .env file with required variables
+            cat > .env.production << EOF
+            NODE_ENV=production
+            MONGODB_URI=${{ secrets.MONGODB_URI }}
+            JWT_SECRET=${{ secrets.JWT_SECRET }}
+            JWT_EXPIRE=7d
+            NEXTAUTH_SECRET=${{ secrets.NEXTAUTH_SECRET }}
+            NEXTAUTH_URL=http://${{ secrets.SERVER_HOST }}:3000
+            NEXT_PUBLIC_API_URL=http://${{ secrets.SERVER_HOST }}/api
+            EOF
+            
+            # Build Docker image locally
+            docker build -t complaint-app:latest .
+            
+            # Stop existing containers
+            docker-compose -f docker-compose.prod.yml down --remove-orphans || true
+            
+            # Start new containers
+            docker-compose -f docker-compose.prod.yml up -d
+            
+            # Wait for app to be healthy
+            echo "Waiting for application to be ready..."
+            for i in {1..30}; do
+              if curl -f http://localhost:3000 > /dev/null 2>&1; then
+                echo "Application is healthy!"
+                break
+              fi
+              echo "Waiting... ($i/30)"
+              sleep 2
+            done
+            
+            # Show deployment status
+            echo "=== Deployment Status ==="
+            docker-compose -f docker-compose.prod.yml ps
+            echo "=== Done ==="
+            echo "Access application at: http://${{ secrets.SERVER_HOST }}:3000"
+            '
+
+      - name: Notify deployment success
+        if: success()
+        run: |
+          echo "✅ Deployment successful!"
+          echo "Application URL: http://${{ secrets.SERVER_HOST }}:3000"
+
+      - name: Notify deployment failure
+        if: failure()
+        run: |
+          echo "❌ Deployment failed!"
+          exit 1
