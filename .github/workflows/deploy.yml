@@ -19,28 +19,13 @@ jobs:
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
           
-          # Save secret to temp file first, then decode
-          cat > /tmp/key.b64 << 'EOF'
-          ${{ secrets.SSH_PRIVATE_KEY }}
-          EOF
-          
-          # Strip any whitespace and decode
-          cat /tmp/key.b64 | tr -d ' \n\r\t' | base64 -d | tee ~/.ssh/deploy_key > /dev/null
-          
-          # Set correct permissions
+          # Decode base64 and strip any Windows CRLF (\r) characters
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" | base64 -d | tr -d '\r' > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
           
-          # Debug output
-          echo "=== SSH Key Setup ==="
-          echo "File exists: $([ -f ~/.ssh/deploy_key ] && echo 'YES' || echo 'NO')"
-          echo "File size: $(stat -f %z ~/.ssh/deploy_key 2>/dev/null || stat -c%s ~/.ssh/deploy_key 2>/dev/null || wc -c < ~/.ssh/deploy_key) bytes"
-          echo "File permissions: $(ls -la ~/.ssh/deploy_key | awk '{print $1}')"
-          echo "File type:"
-          file ~/.ssh/deploy_key
-          echo "First line:"
-          head -1 ~/.ssh/deploy_key
-          echo "Last line:"
-          tail -1 ~/.ssh/deploy_key
+          # Verify the key loaded correctly (type must NOT be -1)
+          echo "=== SSH Key Check ==="
+          ssh-keygen -l -f ~/.ssh/deploy_key && echo "KEY VALID" || echo "KEY INVALID"
           
           # Add server to known hosts
           ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts 2>/dev/null || true
