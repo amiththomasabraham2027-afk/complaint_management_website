@@ -10,6 +10,9 @@ RUN npm ci --legacy-peer-deps
 # Copy source code
 COPY . .
 
+# Ensure public directory exists
+RUN mkdir -p /app/public
+
 # Build the application
 RUN npm run build
 
