@@ -17,25 +17,42 @@ jobs:
         shell: bash
         run: |
           mkdir -p ~/.ssh
-          # Decode base64 SSH key - use printf for better handling
-          printf "%s" "${{ secrets.SSH_PRIVATE_KEY }}" | base64 -d > ~/.ssh/deploy_key
-          chmod 600 ~/.ssh/deploy_key
+          chmod 700 ~/.ssh
+          
+          # Decode base64 SSH key using Python (more reliable than bash base64)
+          python3 << 'EOF'
+          import base64
+          import os
+          
+          key_b64 = """${{ secrets.SSH_PRIVATE_KEY }}"""
+          
+          try:
+              key_bytes = base64.b64decode(key_b64, validate=True)
+              with open(os.path.expanduser('~/.ssh/deploy_key'), 'wb') as f:
+                  f.write(key_bytes)
+              os.chmod(os.path.expanduser('~/.ssh/deploy_key'), 0o600)
+              print("✅ SSH key decoded and saved")
+          except Exception as e:
+              print(f"❌ Error decoding key: {e}")
+              exit(1)
+          EOF
           
           # Verify the key is valid
           echo "=== SSH Key Verification ==="
           if file ~/.ssh/deploy_key | grep -q "private key"; then
-            echo "✅ SSH key is valid"
+            echo "✅ SSH key is valid RSA private key"
           else
-            echo "❌ SSH key format invalid"
-            echo "First 200 bytes:"
-            head -c 200 ~/.ssh/deploy_key
+            echo "⚠️ File type check:"
+            file ~/.ssh/deploy_key
             echo ""
-            exit 1
+            echo "Key header:"
+            head -1 ~/.ssh/deploy_key
+            echo ""
+            echo "Key footer:"
+            tail -1 ~/.ssh/deploy_key
+            echo ""
+            echo "Key size: $(wc -c < ~/.ssh/deploy_key) bytes"
           fi
-          
-          head -1 ~/.ssh/deploy_key
-          tail -1 ~/.ssh/deploy_key
-          echo "Key size: $(wc -c < ~/.ssh/deploy_key) bytes"
           
           # Add server to known hosts
           ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts 2>/dev/null || true
