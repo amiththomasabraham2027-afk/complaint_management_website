@@ -8,7 +8,7 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -16,58 +16,55 @@ jobs:
       - name: Setup SSH Key
         shell: bash
         run: |
-          mkdir -p ~/.ssh
-          chmod 700 ~/.ssh
-          
-          # Decode base64 and strip any Windows CRLF (\r) characters
-          echo "${{ secrets.SSH_PRIVATE_KEY }}" | base64 -d | tr -d '\r' > ~/.ssh/deploy_key
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+
+          # Decode base64 private key, strip any stray \r characters
+          printf '%s' "${{ secrets.SSH_PRIVATE_KEY }}" | base64 -d | tr -d '\r' > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-          
-          # Verify the key loaded correctly (type must NOT be -1)
-          echo "=== SSH Key Check ==="
-          ssh-keygen -l -f ~/.ssh/deploy_key && echo "KEY VALID" || echo "KEY INVALID"
-          
+
+          # Print fingerprint so we can verify it matches authorized_keys on server
+          echo "=== Key fingerprint being used ==="
+          ssh-keygen -l -f ~/.ssh/deploy_key || echo "KEY TYPE -1 (invalid decode)"
+          echo "=== Public key being used ==="
+          ssh-keygen -y -f ~/.ssh/deploy_key || echo "COULD NOT EXTRACT PUBLIC KEY"
+
           # Add server to known hosts
-          ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts 2>/dev/null || true
+          ssh-keyscan -H "${{ secrets.SERVER_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null || true
 
       - name: Deploy via SSH
-        shell: bash
-        run: |
-          echo "=== Testing SSH Connection ==="
-          ssh -v -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no -o UserKnownHostsFile=~/.ssh/known_hosts -o ConnectTimeout=10 ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'DEPLOY_SCRIPT'
-          echo "=== Deployment Started ==="
-          whoami
-          pwd
-          
-          # Create project directory if it doesn't exist
-          mkdir -p ~/complaint-management-web
-          cd ~/complaint-management-web
-          
-          # Initialize or update git repo
-          if [ -d .git ]; then
-            echo "Pulling latest code..."
-            git pull origin main
-          else
-            echo "Cloning repository..."
-            git clone https://github.com/amiththomasabraham2027-afk/complaint_management_website.git .
-          fi
-          
-          # Install dependencies
-          echo "Installing dependencies..."
-          npm ci --production
-          
-          # Build application  
-          echo "Building application..."
-          npm run build
-          
-          # Install and start with PM2
-          echo "Starting application with PM2..."
-          npm install -g pm2 2>/dev/null || true
-          pm2 restart resolvex || pm2 start npm --name "resolvex" -- start
-          pm2 save
-          
-          # Verify deployment
-          echo "=== Deployment Status ==="
-          pm2 list
-          echo "=== Application Ready ==="
-          DEPLOY_SCRIPT
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          key_format: base64
+          timeout: 60s
+          script: |
+            echo "=== Deployment Started ==="
+            whoami && pwd
+
+            mkdir -p ~/complaint-management-web
+            cd ~/complaint-management-web
+
+            if [ -d .git ]; then
+              echo "Pulling latest code..."
+              git pull origin main
+            else
+              echo "Cloning repository..."
+              git clone https://github.com/amiththomasabraham2027-afk/complaint_management_website.git .
+            fi
+
+            echo "Installing dependencies..."
+            npm ci --production
+
+            echo "Building application..."
+            npm run build
+
+            echo "Starting with PM2..."
+            npm install -g pm2 2>/dev/null || true
+            pm2 restart resolvex || pm2 start npm --name "resolvex" -- start
+            pm2 save
+
+            echo "=== Deployment Status ==="
+            pm2 list
+            echo "=== Done ==="
