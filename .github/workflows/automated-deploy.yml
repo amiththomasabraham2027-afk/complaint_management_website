@@ -1,4 +1,4 @@
-name: 🚀 Build, Push & Deploy to EC2
+name: "Build, Push and Deploy to EC2"
 
 on:
   push:
@@ -7,9 +7,9 @@ on:
   workflow_dispatch:
     inputs:
       environment:
-        description: 'Deployment environment'
+        description: "Deployment environment"
         required: true
-        default: 'production'
+        default: "production"
         type: choice
         options:
           - production
@@ -22,25 +22,25 @@ env:
 
 jobs:
   build-and-push:
-    name: Build & Push Docker Image
+    name: Build and Push Docker Image
     runs-on: ubuntu-latest
     outputs:
       image-tag: ${{ steps.meta.outputs.tags }}
-    
+
     steps:
-      - name: 📥 Checkout code
+      - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: 🔧 Set up Docker Buildx
+      - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: 🔐 Login to Docker Hub
+      - name: Login to Docker Hub
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      - name: 📋 Extract metadata
+      - name: Extract metadata
         id: meta
         uses: docker/metadata-action@v5
         with:
@@ -48,11 +48,9 @@ jobs:
           tags: |
             type=ref,event=branch
             type=sha,prefix={{branch}}-
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
             type=raw,value=latest
 
-      - name: 🐳 Build and push Docker image
+      - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
           context: .
@@ -62,183 +60,88 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: ✅ Build Success
+      - name: Build Success
         run: |
-          echo "✅ Docker image built and pushed successfully!"
-          echo "📦 Images: ${{ steps.meta.outputs.tags }}"
+          echo "Docker image built and pushed successfully!"
 
   deploy-to-ec2:
-    name: 🚀 Deploy to EC2
+    name: Deploy to EC2
     runs-on: ubuntu-latest
     needs: build-and-push
     if: success()
 
     steps:
-      - name: 📥 Checkout code
-        uses: actions/checkout@v4
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: 22
+          timeout: 300s
+          command_timeout: 20m
+          script: |
+            set -e
+            echo "Starting Deployment..."
 
-      - name: 🔑 Setup SSH key
-        env:
-          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
-        run: |
-          mkdir -p ~/.ssh
-          printf '%s' "$SSH_PRIVATE_KEY" > ~/.ssh/deploy_key
-          # Fix Windows CRLF line endings if present
-          sed -i 's/\r//' ~/.ssh/deploy_key
-          chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -H ${{ secrets.HOST }} >> ~/.ssh/known_hosts 2>/dev/null || true
-          # Verify key is valid
-          ssh-keygen -l -f ~/.ssh/deploy_key
-
-      - name: 📡 Test SSH connection
-        run: |
-          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no -o ConnectTimeout=10 \
-            -o BatchMode=yes \
-            ${{ secrets.USERNAME }}@${{ secrets.HOST }} "echo 'SSH connection successful!'"
-
-      - name: 🚀 Deploy application
-        env:
-          DOCKER_IMAGE: ${{ env.DOCKER_USERNAME }}/complaint-app:latest
-          EC2_HOST: ${{ secrets.HOST }}
-          EC2_USER: ${{ secrets.USERNAME }}
-          MONGODB_URI: ${{ secrets.MONGODB_URI }}
-          JWT_SECRET: ${{ secrets.JWT_SECRET }}
-          NEXTAUTH_SECRET: ${{ secrets.NEXTAUTH_SECRET }}
-        run: |
-          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
-            -o BatchMode=yes \
-            ${{ secrets.USERNAME }}@${{ secrets.HOST }} 'bash -s' << 'DEPLOYEOF'
-          
-          set -e
-          
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          echo "🚀 Starting Deployment..."
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          
-          APP_DIR="$HOME/complaint-app"
-          mkdir -p "$APP_DIR"
-          cd "$APP_DIR"
-          
-          echo ""
-          echo "📂 Working directory: $APP_DIR"
-          
-          # Clone or update repository
-          echo ""
-          echo "📝 Setting up repository..."
-          if [ -d .git ]; then
-            echo "   Updating existing repository..."
-            git pull origin main --ff-only || git pull origin main
-          else
-            echo "   Cloning new repository..."
-            git clone https://github.com/amiththomasabraham2027-afk/complaint_management_website.git .
-          fi
-          echo "   ✓ Repository ready"
-          
-          # Create environment file
-          echo ""
-          echo "⚙️  Creating environment configuration..."
-          cat > .env.production << 'ENVEOF'
-          NODE_ENV=production
-          MONGODB_URI=${{ env.MONGODB_URI }}
-          JWT_SECRET=${{ env.JWT_SECRET }}
-          NEXTAUTH_SECRET=${{ env.NEXTAUTH_SECRET }}
-          NEXTAUTH_URL=http://${{ env.EC2_HOST }}
-          NEXT_PUBLIC_API_URL=http://${{ env.EC2_HOST }}/api
-          ENVEOF
-          echo "   ✓ Environment file created"
-          
-          # Pull latest Docker image
-          echo ""
-          echo "🐳 Pulling Docker image..."
-          docker pull ${{ env.DOCKER_IMAGE }} || echo "   Note: Image may need to be available on Docker Hub"
-          echo "   ✓ Docker image ready"
-          
-          # Stop existing containers
-          echo ""
-          echo "⏹️  Stopping existing containers..."
-          docker-compose -f docker-compose.prod.yml down --remove-orphans 2>/dev/null || true
-          echo "   ✓ Existing containers stopped"
-          
-          # Start new containers
-          echo ""
-          echo "▶️  Starting application containers..."
-          docker-compose -f docker-compose.prod.yml up -d
-          echo "   ✓ Containers started"
-          
-          # Wait for application to be ready
-          echo ""
-          echo "⏳ Waiting for application to be ready..."
-          for i in {1..30}; do
-            if curl -sf http://localhost/health > /dev/null 2>&1; then
-              echo "   ✓ Application is healthy!"
-              break
+            if ! command -v docker &>/dev/null; then
+              curl -fsSL https://get.docker.com | sh
+              sudo usermod -aG docker ubuntu
             fi
-            echo "   Attempt $i/30..."
-            sleep 2
-          done
-          
-          # Display status
-          echo ""
-          echo "📊 Container Status:"
-          docker-compose -f docker-compose.prod.yml ps
-          
-          echo ""
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          echo "✅ DEPLOYMENT COMPLETE!"
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          echo ""
-          echo "🌐 Application URL: http://${{ env.EC2_HOST }}"
-          echo "📋 To view logs: docker-compose -f docker-compose.prod.yml logs -f complaint-app"
-          echo "🔄 To restart: docker-compose -f docker-compose.prod.yml restart"
-          echo ""
-          
-          DEPLOYEOF
+            if ! command -v docker-compose &>/dev/null; then
+              sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+              sudo chmod +x /usr/local/bin/docker-compose
+            fi
 
-      - name: 🔍 Verify deployment
-        run: |
-          echo "Verifying deployment..."
-          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
-            ${{ secrets.USERNAME }}@${{ secrets.HOST }} \
-            "docker-compose -f ~/complaint-app/docker-compose.prod.yml ps"
+            APP_DIR="$HOME/complaint-app"
+            mkdir -p "$APP_DIR"
+            cd "$APP_DIR"
+
+            if [ -d .git ]; then
+              git pull origin main --ff-only || git pull origin main
+            else
+              git clone https://github.com/amiththomasabraham2027-afk/complaint_management_website.git .
+            fi
+            echo "Repository ready"
+
+            docker pull amiththomasabraham/complaint-app:latest
+            echo "Docker image pulled"
+
+            docker-compose -f docker-compose.prod.yml down --remove-orphans 2>/dev/null || true
+            docker-compose -f docker-compose.prod.yml up -d
+            echo "Containers started"
+
+            for i in $(seq 1 30); do
+              if curl -sf http://localhost/health > /dev/null 2>&1; then
+                echo "Application is healthy!"
+                break
+              fi
+              sleep 3
+            done
+
+            docker-compose -f docker-compose.prod.yml ps
+            echo "DEPLOYMENT COMPLETE!"
 
   notify-success:
-    name: 📢 Notification
+    name: Notification
     runs-on: ubuntu-latest
     needs: deploy-to-ec2
     if: success()
 
     steps:
-      - name: 🎉 Deployment Success
+      - name: Deployment Success
         run: |
-          cat << 'EOF'
-          
-          ╔══════════════════════════════════════════════════════════╗
-          ║           ✅ DEPLOYMENT SUCCESSFUL                       ║
-          ╚══════════════════════════════════════════════════════════╝
-          
-          📦 Docker Image: ${{ env.DOCKER_USERNAME }}/complaint-app:latest
-          🌐 Application: http://${{ secrets.HOST }}
-          📊 CI/CD: GitHub Actions
-          🐳 Container: Docker Compose
-          🔄 Status: Running
-          
-          Next Steps:
-          ──────────────────────────────────────────────────────────
-          1. Access your application: http://${{ secrets.HOST }}
-          2. Monitor logs: ssh -i resolvex_deploy.pem ubuntu@${{ secrets.HOST }}
-                           docker-compose -f ~/complaint-app/docker-compose.prod.yml logs -f
-          3. For issues: Check GitHub Actions logs for deployment details
-          
-          EOF
+          echo "DEPLOYMENT SUCCESSFUL"
+          echo "Application URL: http://${{ secrets.HOST }}"
 
   notify-failure:
-    name: 📢 Failure Notification
+    name: Failure Notification
     runs-on: ubuntu-latest
     if: failure()
     needs: [build-and-push, deploy-to-ec2]
 
     steps:
-      - name: ❌ Deployment Failed
+      - name: Deployment Failed
         run: |
-          echo "❌ Deployment failed! Check the logs above for details."
+          echo "Deployment failed! Check the logs above."
           exit 1
