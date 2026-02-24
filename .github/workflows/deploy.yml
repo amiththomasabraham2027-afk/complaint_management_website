@@ -45,9 +45,15 @@ jobs:
       - name: Setup SSH key
         run: |
           mkdir -p ~/.ssh
-          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          cat > ~/.ssh/deploy_key << 'KEYEOF'
+          ${{ secrets.SSH_PRIVATE_KEY }}
+          KEYEOF
           chmod 600 ~/.ssh/deploy_key
           ssh-keyscan -H ${{ secrets.HOST }} >> ~/.ssh/known_hosts 2>/dev/null || true
+          
+          # Debug: verify key format
+          head -1 ~/.ssh/deploy_key
+          tail -1 ~/.ssh/deploy_key
 
       # 6. Deploy to EC2
       - name: Deploy to AWS EC2
@@ -59,6 +65,15 @@ jobs:
           JWT_SECRET: ${{ secrets.JWT_SECRET }}
           NEXTAUTH_SECRET: ${{ secrets.NEXTAUTH_SECRET }}
         run: |
+          # Test SSH connection first
+          echo "Testing SSH connection to $USERNAME@$HOST..."
+          ssh -i ~/.ssh/deploy_key \
+            -o StrictHostKeyChecking=no \
+            -o ConnectTimeout=30 \
+            -v \
+            $USERNAME@$HOST "echo 'SSH connection successful'" || exit 1
+          
+          # Deploy
           ssh -i ~/.ssh/deploy_key \
             -o StrictHostKeyChecking=no \
             -o ConnectTimeout=30 \
