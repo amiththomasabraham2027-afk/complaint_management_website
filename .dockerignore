@@ -1,54 +1,3 @@
-<<<<<<< HEAD
-# Git
-.git
-.gitignore
-.gitattributes
-
-# Dependencies
-node_modules/
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-.pnpm-debug.log*
-
-# Build outputs
-.next/
-out/
-dist/
-build/
-
-# Environment
-.env.local
-.env.*.local
-*.pem
-
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-.DS_Store
-
-# Documentation
-*.md
-ARCHITECTURE.md
-DEPLOYMENT.md
-SETUP.md
-GITHUB_DEPLOYMENT_SETUP.md
-prd.md
-
-# DevOps/Config
-.github/
-docker-compose*.yml
-Dockerfile
-.dockerignore
-*.sh
-
-# Testing
-coverage/
-.nyc_output/
-=======
 node_modules
 npm-debug.log
 .next
@@ -70,4 +19,3 @@ build
 docker-compose.yml
 Dockerfile
 .dockerignore
->>>>>>> parent of a679453 (remove: delete all Docker and Nginx configuration files)

@@ -3,43 +3,6 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-<<<<<<< HEAD
-# Install dependencies
-COPY package*.json ./
-RUN npm ci --legacy-peer-deps
-
-# Copy source code
-COPY . .
-
-# Ensure public directory exists
-RUN mkdir -p /app/public
-
-# Build the application
-RUN npm run build
-
-# Production stage
-FROM node:20-alpine
-
-WORKDIR /app
-
-# Install dumb-init for proper signal handling
-RUN apk add --no-cache dumb-init
-
-# Create non-root user
-RUN addgroup -g 1001 -S nodejs
-RUN adduser -S nextjs -u 1001
-
-# Copy built application and dependencies from builder
-COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
-COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
-COPY --from=builder --chown=nextjs:nodejs /app/public ./public
-
-# Environment variables are provided via docker-compose.yml in production
-# Do not copy .env files into the image
-
-# Set user
-USER nextjs
-=======
 # Copy package files
 COPY package.json package-lock.json ./
 
@@ -64,7 +27,6 @@ ENV PORT=3000
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/public ./public
->>>>>>> parent of a679453 (remove: delete all Docker and Nginx configuration files)
 
 # Expose port
 EXPOSE 3000
