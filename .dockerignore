@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Git
 .git
 .gitignore
@@ -47,3 +48,26 @@ Dockerfile
 # Testing
 coverage/
 .nyc_output/
+=======
+node_modules
+npm-debug.log
+.next
+.git
+.gitignore
+.env
+.env.*
+*.pem
+.DS_Store
+.vscode
+.idea
+.env.example
+coverage
+dist
+build
+*.md
+.github
+.gitattributes
+docker-compose.yml
+Dockerfile
+.dockerignore
+>>>>>>> parent of a679453 (remove: delete all Docker and Nginx configuration files)
